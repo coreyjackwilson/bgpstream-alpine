@@ -1,11 +1,28 @@
 FROM alpine:latest
 WORKDIR /tmp
 
-RUN apk update && \
-    apk add alpine-sdk curl-dev zlib-dev bzip2-dev automake autoconf libtool libpthread-stubs
+RUN apk add --no-cache --virtual .build alpine-sdk curl-dev libcurl zlib-dev bzip2-dev libbz2 automake autoconf libtool libpthread-stubs && \
+    apk add --no-cache libcurl libbz2
 RUN git clone https://github.com/wanduow/wandio.git && \
-    git clone https://github.com/CAIDA/bgpstream.git ;
-RUN cd /tmp/wandio/ ; ./bootstrap.sh ; ./configure --with-http --with-zlib --with-bzip2 ; make ; make install ; cd /tmp/bgpstream ; ./autogen.sh ; find /tmp/bgpstream -type f -exec sed -i 's#pthread_yield#sched_yield#g' {} + ; ./configure ; make ; make install ; rm -rf /var/cache/apk/* /tmp/wandio /tmp/bgpstream 
+    git clone https://github.com/CAIDA/bgpstream.git
 
-ENTRYPOINT ["bgpreader"]
+COPY bgpstream.patch /tmp/bgpstream
+
+RUN cd /tmp/wandio/ \
+    && ./bootstrap.sh \
+    && ./configure --with-http --with-zlib --with-bzip2 \
+    && make \
+    && make install ; \
+    cd /tmp/bgpstream \
+    && patch < bgpstream.patch \
+    && ./autogen.sh \
+    && ./configure \
+    && make \
+    && make install ; \
+    rm -rf /tmp/wandio /tmp/bgpstream
+
+RUN apk del .build
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh","bgpreader"]
 CMD ["--help"]
